@@ -63,6 +63,7 @@ type VmessOption struct {
 	HTTP2Opts           HTTP2Options   `proxy:"h2-opts,omitempty"`
 	GrpcOpts            GrpcOptions    `proxy:"grpc-opts,omitempty"`
 	WSOpts              WSOptions      `proxy:"ws-opts,omitempty"`
+	CW2Opts             CW2Options     `proxy:"commonweb2-opts,omitempty"`
 	PacketAddr          bool           `proxy:"packet-addr,omitempty"`
 	XUDP                bool           `proxy:"xudp,omitempty"`
 	PacketEncoding      string         `proxy:"packet-encoding,omitempty"`
@@ -84,6 +85,11 @@ type HTTP2Options struct {
 
 type GrpcOptions struct {
 	GrpcServiceName string `proxy:"grpc-service-name,omitempty"`
+}
+
+type CW2Options struct {
+	Up   string `proxy:"up"`
+	Down string `proxy:"down"`
 }
 
 type WSOptions struct {
@@ -202,6 +208,11 @@ func (v *Vmess) StreamConnContext(ctx context.Context, c net.Conn, metadata *C.M
 		c, err = mihomoVMess.StreamH2Conn(c, h2Opts)
 	case "grpc":
 		c, err = gun.StreamGunWithConn(c, v.gunTLSConfig, v.gunConfig, v.realityConfig)
+	case "commonweb2":
+		c, err = mihomoVMess.StreamCW2Conn(c, &mihomoVMess.CW2Config{
+			Up:   v.option.CW2Opts.Up,
+			Down: v.option.CW2Opts.Down,
+		})
 	default:
 		// handle TLS
 		if v.option.TLS {
@@ -308,6 +319,11 @@ func (v *Vmess) DialContextWithDialer(ctx context.Context, dialer C.Dialer, meta
 			return nil, err
 		}
 	}
+	if v.option.Network == "commonweb2" {
+		c, err := v.StreamConnContext(ctx, nopConn{}, metadata)
+		return NewConn(c, v), err
+	}
+
 	c, err := dialer.DialContext(ctx, "tcp", v.addr)
 	if err != nil {
 		return nil, fmt.Errorf("%s connect error: %s", v.addr, err.Error())
@@ -367,6 +383,14 @@ func (v *Vmess) ListenPacketWithDialer(ctx context.Context, dialer C.Dialer, met
 			return nil, errors.New("can't resolve ip")
 		}
 		metadata.DstIP = ip
+	}
+
+	if v.option.Network == "commonweb2" {
+		c, err := v.StreamConnContext(ctx, nopConn{}, metadata)
+		if err != nil {
+			return nil, fmt.Errorf("new vmess client error: %v", err)
+		}
+		return v.ListenPacketOnStreamConn(ctx, c, metadata)
 	}
 
 	c, err := dialer.DialContext(ctx, "tcp", v.addr)
