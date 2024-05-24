@@ -13,6 +13,8 @@ import (
 	"sync"
 
 	"github.com/metacubex/mihomo/log"
+
+	C "github.com/metacubex/mihomo/constant"
 )
 
 var cw2Initialize = sync.Once{}
@@ -25,9 +27,15 @@ type CW2Config struct {
 	TLSConfig *tls.Config
 }
 
-func StreamCW2Conn(_ net.Conn, cfg *CW2Config) (net.Conn, error) {
+func StreamCW2Conn(cfg *CW2Config, dialer C.Dialer) (net.Conn, error) {
 	cw2Initialize.Do(func() {
-		cw2HttpClient = &http.Client{}
+		cw2HttpClient = &http.Client{
+			Transport: &http.Transport{
+				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+					return dialer.DialContext(ctx, network, addr)
+				},
+			},
+		}
 	})
 
 	// pipe

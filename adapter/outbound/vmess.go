@@ -209,10 +209,6 @@ func (v *Vmess) StreamConnContext(ctx context.Context, c net.Conn, metadata *C.M
 	case "grpc":
 		c, err = gun.StreamGunWithConn(c, v.gunTLSConfig, v.gunConfig, v.realityConfig)
 	case "commonweb2":
-		c, err = mihomoVMess.StreamCW2Conn(c, &mihomoVMess.CW2Config{
-			Up:   v.option.CW2Opts.Up,
-			Down: v.option.CW2Opts.Down,
-		})
 	default:
 		// handle TLS
 		if v.option.TLS {
@@ -320,7 +316,15 @@ func (v *Vmess) DialContextWithDialer(ctx context.Context, dialer C.Dialer, meta
 		}
 	}
 	if v.option.Network == "commonweb2" {
-		c, err := v.StreamConnContext(ctx, nopConn{}, metadata)
+		c, err := mihomoVMess.StreamCW2Conn(&mihomoVMess.CW2Config{
+			Up:   v.option.CW2Opts.Up,
+			Down: v.option.CW2Opts.Down,
+		}, dialer)
+		if err != nil {
+			return nil, fmt.Errorf("%s connect error: %s", v.addr, err.Error())
+		}
+
+		c, err = v.StreamConnContext(ctx, c, metadata)
 		return NewConn(c, v), err
 	}
 
@@ -386,7 +390,15 @@ func (v *Vmess) ListenPacketWithDialer(ctx context.Context, dialer C.Dialer, met
 	}
 
 	if v.option.Network == "commonweb2" {
-		c, err := v.StreamConnContext(ctx, nopConn{}, metadata)
+		c, err := mihomoVMess.StreamCW2Conn(&mihomoVMess.CW2Config{
+			Up:   v.option.CW2Opts.Up,
+			Down: v.option.CW2Opts.Down,
+		}, dialer)
+		if err != nil {
+			return nil, fmt.Errorf("%s connect error: %s", v.addr, err.Error())
+		}
+
+		c, err = v.StreamConnContext(ctx, c, metadata)
 		if err != nil {
 			return nil, fmt.Errorf("new vmess client error: %v", err)
 		}
