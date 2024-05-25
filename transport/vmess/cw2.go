@@ -10,15 +10,11 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"sync"
 
 	"github.com/metacubex/mihomo/log"
 
 	C "github.com/metacubex/mihomo/constant"
 )
-
-var cw2Initialize = sync.Once{}
-var cw2HttpClient *http.Client
 
 type CW2Config struct {
 	Up        string
@@ -28,15 +24,13 @@ type CW2Config struct {
 }
 
 func StreamCW2Conn(cfg *CW2Config, dialer C.Dialer) (net.Conn, error) {
-	cw2Initialize.Do(func() {
-		cw2HttpClient = &http.Client{
-			Transport: &http.Transport{
-				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-					return dialer.DialContext(ctx, network, addr)
-				},
+	cw2HttpClient := &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return dialer.DialContext(ctx, network, addr)
 			},
-		}
-	})
+		},
+	}
 
 	// pipe
 	conn1, conn2 := net.Pipe()
@@ -101,7 +95,11 @@ func StreamCW2Conn(cfg *CW2Config, dialer C.Dialer) (net.Conn, error) {
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			log.Errorln("cw2 download: %s", resp.Status)
+			all, err := io.ReadAll(resp.Body)
+			if err != nil {
+				log.Debugln("cw2 download: read all: %s", err.Error())
+			}
+			log.Errorln("cw2 download: %s %s", resp.Status, string(all))
 			return
 		}
 
@@ -111,6 +109,7 @@ func StreamCW2Conn(cfg *CW2Config, dialer C.Dialer) (net.Conn, error) {
 	go func() {
 		<-ctx.Done()
 		conn2.Close()
+		cw2HttpClient.CloseIdleConnections()
 	}()
 
 	return conn1, nil
